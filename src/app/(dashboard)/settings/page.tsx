@@ -68,7 +68,7 @@ export default function SettingsPage() {
               <h2 className="text-lg font-semibold">Profile Information</h2>
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  <img src={currentUser.avatar} alt={currentUser.name} className="h-20 w-20 rounded-full object-cover ring-4 ring-border" />
+                  <img src={currentUser.image ?? undefined} alt={currentUser.name} className="h-20 w-20 rounded-full object-cover ring-4 ring-border" />
                   <button className="absolute bottom-0 right-0 rounded-full bg-primary p-1.5 text-primary-foreground shadow-md hover:bg-primary/90 transition-colors">
                     <Camera className="h-3.5 w-3.5" />
                   </button>
@@ -82,7 +82,7 @@ export default function SettingsPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <Input label="Full Name" defaultValue={currentUser.name} icon={<User className="h-4 w-4" />} />
                 <Input label="Email" defaultValue={currentUser.email} icon={<Mail className="h-4 w-4" />} />
-                <Input label="Phone" defaultValue={currentUser.phone} icon={<Phone className="h-4 w-4" />} />
+                <Input label="Phone" defaultValue={currentUser.phone ?? undefined} icon={<Phone className="h-4 w-4" />} />
                 <Input label="Role" defaultValue={currentUser.role} disabled icon={<Users className="h-4 w-4" />} />
               </div>
               <Button><Save className="mr-2 h-4 w-4" /> Save Changes</Button>

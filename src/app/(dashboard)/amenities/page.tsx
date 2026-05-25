@@ -22,7 +22,7 @@ export default function AmenitiesPage() {
 
   const filtered = amenities.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase()) ||
-    a.description.toLowerCase().includes(search.toLowerCase())
+    a.description?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) {
@@ -48,7 +48,7 @@ export default function AmenitiesPage() {
         {filtered.map((amenity) => (
           <motion.div key={amenity.id} whileHover={{ y: -4 }} className="card-lift group overflow-hidden rounded-xl border border-border bg-card">
             <div className="relative h-48 overflow-hidden">
-              <img src={amenity.image} alt={amenity.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+              <img src={amenity.image ?? undefined} alt={amenity.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
               <div className="absolute top-3 right-3">
                 <Badge variant="glass" className="text-white border-white/20 capitalize">{amenity.type}</Badge>

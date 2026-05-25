@@ -1,12 +1,35 @@
+// ============================================================================
+// Unified Property Management — TypeScript Type Definitions
+// MongoDB-compatible: all IDs are strings (ObjectId serialized).
+// ============================================================================
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+export type UserRole = "admin" | "manager" | "tenant";
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  avatar: string;
-  role: "admin" | "manager" | "staff" | "tenant";
-  phone?: string;
-  createdAt: string;
+  emailVerified?: Date | null;
+  password?: string | null;
+  image?: string | null;
+  phone?: string | null;
+  role: UserRole;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  image?: string | null;
+  role: UserRole;
+}
+
+// ── Properties ────────────────────────────────────────────────────────────
+export type PropertyType = "apartment" | "house" | "condo" | "commercial" | "townhouse";
+export type PropertyStatus = "occupied" | "vacant" | "maintenance" | "listed";
 
 export interface Property {
   id: string;
@@ -15,21 +38,45 @@ export interface Property {
   city: string;
   state: string;
   zipCode: string;
-  type: "apartment" | "house" | "condo" | "commercial" | "townhouse";
-  status: "occupied" | "vacant" | "maintenance" | "listed";
+  type: PropertyType;
+  status: PropertyStatus;
   units: number;
   occupiedUnits: number;
   monthlyRevenue: number;
-  image: string;
-  description?: string;
-  amenities?: string[];
-  yearBuilt?: number;
-  squareFeet?: number;
-  bedrooms?: number;
-  bathrooms?: number;
-  createdAt: string;
-  updatedAt: string;
+  image?: string | null;
+  description?: string | null;
+  amenities: string[];
+  yearBuilt?: number | null;
+  squareFeet?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+// ── Tenants ───────────────────────────────────────────────────────────────
+export type TenantStatus = "active" | "pending" | "expired" | "evicted";
+
+export interface Tenant {
+  id: string;
+  userId: string;
+  propertyId: string;
+  unit: string;
+  leaseStart: Date;
+  leaseEnd: Date;
+  rentAmount: number;
+  securityDeposit: number;
+  status: TenantStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  user?: User;
+  property?: Property;
+}
+
+// ── Maintenance ───────────────────────────────────────────────────────────
+export type MaintenanceCategory = "plumbing" | "electrical" | "hvac" | "structural" | "appliance" | "pest" | "other";
+export type MaintenancePriority = "low" | "medium" | "high" | "emergency";
+export type MaintenanceStatus = "open" | "in-progress" | "resolved" | "closed";
 
 export interface MaintenanceRequest {
   id: string;
@@ -38,16 +85,42 @@ export interface MaintenanceRequest {
   unit: string;
   title: string;
   description: string;
-  category: "plumbing" | "electrical" | "hvac" | "structural" | "appliance" | "pest" | "other";
-  priority: "low" | "medium" | "high" | "emergency";
-  status: "open" | "in-progress" | "resolved" | "closed";
-  assignedTo?: string;
+  category: MaintenanceCategory;
+  priority: MaintenancePriority;
+  status: MaintenanceStatus;
+  assignedTo?: string | null;
   requestedBy: string;
-  cost?: number;
-  createdAt: string;
-  updatedAt: string;
-  resolvedAt?: string;
+  cost?: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  resolvedAt?: Date | null;
+  property?: Property;
+  assignedUser?: User | null;
 }
+
+// ── Amenities ─────────────────────────────────────────────────────────────
+export type AmenityType = "gym" | "pool" | "clubhouse" | "bbq" | "playground" | "parking" | "rooftop" | "lounge" | "other";
+export type AmenityStatus = "available" | "maintenance" | "closed";
+
+export interface Amenity {
+  id: string;
+  propertyId: string;
+  name: string;
+  type: AmenityType;
+  description?: string | null;
+  capacity: number;
+  openTime: string;
+  closeTime: string;
+  requiresBooking: boolean;
+  image?: string | null;
+  status: AmenityStatus;
+  createdAt: Date;
+  updatedAt: Date;
+  property?: Property;
+}
+
+// ── Bookings ──────────────────────────────────────────────────────────────
+export type BookingStatus = "confirmed" | "pending" | "cancelled" | "completed";
 
 export interface Booking {
   id: string;
@@ -57,50 +130,69 @@ export interface Booking {
   amenityName: string;
   userId: string;
   userName: string;
-  date: string;
+  date: Date;
   startTime: string;
   endTime: string;
-  status: "confirmed" | "pending" | "cancelled" | "completed";
-  guestCount?: number;
-  notes?: string;
+  status: BookingStatus;
+  guestCount?: number | null;
+  notes?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  property?: Property;
+  amenity?: Amenity;
+  user?: User;
 }
 
-export interface Amenity {
+// ── Payments ──────────────────────────────────────────────────────────────
+export type PaymentType = "rent" | "deposit" | "fee" | "refund";
+export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
+export type PaymentMethod = "bank_transfer" | "credit_card" | "cash" | "check";
+
+export interface Payment {
   id: string;
+  tenantId: string;
   propertyId: string;
-  name: string;
-  type: "gym" | "pool" | "clubhouse" | "bbq" | "playground" | "parking" | "rooftop" | "lounge" | "other";
-  description: string;
-  capacity: number;
-  openTime: string;
-  closeTime: string;
-  requiresBooking: boolean;
-  image: string;
-  status: "available" | "maintenance" | "closed";
+  userId: string;
+  amount: number;
+  type: PaymentType;
+  status: PaymentStatus;
+  method: PaymentMethod;
+  dueDate?: Date | null;
+  paidAt?: Date | null;
+  description?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+// ── Notifications ─────────────────────────────────────────────────────────
+export type NotificationType = "info" | "warning" | "success" | "error";
 
 export interface Notification {
   id: string;
   userId: string;
   title: string;
   message: string;
-  type: "info" | "warning" | "success" | "error";
+  type: NotificationType;
   read: boolean;
-  link?: string;
-  createdAt: string;
+  link?: string | null;
+  createdAt: Date;
 }
 
-export interface Activity {
+// ── Activity Log ──────────────────────────────────────────────────────────
+export type ActivityType = "booking" | "maintenance" | "property" | "payment" | "user" | "system";
+
+export interface ActivityLog {
   id: string;
   userId: string;
   userName: string;
-  userAvatar: string;
+  userAvatar?: string | null;
   action: string;
   target: string;
-  type: "booking" | "maintenance" | "property" | "payment" | "user" | "system";
-  createdAt: string;
+  type: ActivityType;
+  createdAt: Date;
 }
 
+// ── Dashboard ─────────────────────────────────────────────────────────────
 export interface DashboardStats {
   totalProperties: number;
   totalUnits: number;
@@ -118,9 +210,25 @@ export interface DashboardStats {
   revenueByProperty: { property: string; revenue: number }[];
 }
 
+// ── Navigation ────────────────────────────────────────────────────────────
 export interface NavItem {
   title: string;
   href: string;
   icon: string;
   children?: NavItem[];
+}
+
+// ── API Responses ─────────────────────────────────────────────────────────
+export interface ApiResponse<T = unknown> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+export interface PaginatedResponse<T> extends ApiResponse<T[]> {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

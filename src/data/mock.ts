@@ -4,7 +4,7 @@ export const currentUser: User = {
   id: "usr_1",
   name: "Alexandra Chen",
   email: "alex@propertypro.com",
-  avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=face",
+  image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=face",
   role: "admin",
   phone: "+1 (555) 123-4567",
   createdAt: "2024-01-15T08:00:00Z",

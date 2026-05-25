@@ -135,7 +135,7 @@ export default function PropertiesPage() {
               {view === "grid" && (
                 <div className="relative h-48 overflow-hidden">
                   <img
-                    src={property.image}
+                    src={property.image ?? undefined}
                     alt={property.name}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />

@@ -1,0 +1,294 @@
+// ============================================================================
+// Unified Property Management — MongoDB Prisma Schema
+// Provider: MongoDB Atlas via `db push` (no migrations for MongoDB)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// 1. USER
+// ---------------------------------------------------------------------------
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  phone         String?
+  role          String    @default("tenant") // admin | manager | tenant
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts        Account[]
+  sessions        Session[]
+  tenants         Tenant[]           @relation("UserTenants")
+  bookings        Booking[]
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+  assignedMaintenance MaintenanceRequest[] @relation("AssignedToUser")
+  payments        Payment[]
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// 2. ACCOUNT (NextAuth)
+// ---------------------------------------------------------------------------
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// ---------------------------------------------------------------------------
+// 3. SESSION (NextAuth)
+// ---------------------------------------------------------------------------
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// 4. VERIFICATION TOKEN (NextAuth)
+// ---------------------------------------------------------------------------
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// 5. PROPERTY
+// ---------------------------------------------------------------------------
+model Property {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  address        String
+  city           String
+  state          String
+  zipCode        String
+  type           String    @default("apartment") // apartment | house | condo | commercial | townhouse
+  status         String    @default("vacant")     // occupied | vacant | maintenance | listed
+  units          Int       @default(0)
+  occupiedUnits  Int       @default(0)
+  monthlyRevenue Float     @default(0)
+  image          String?
+  description    String?
+  amenities      String[]  @default([])
+  yearBuilt      Int?
+  squareFeet     Float?
+  bedrooms       Int?
+  bathrooms      Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  tenants              Tenant[]
+  maintenanceRequests  MaintenanceRequest[]
+  bookings             Booking[]
+  amenitiesRef         Amenity[]
+  payments             Payment[]
+
+  @@map("properties")
+}
+
+// ---------------------------------------------------------------------------
+// 6. TENANT
+// ---------------------------------------------------------------------------
+model Tenant {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String    @db.ObjectId
+  propertyId    String    @db.ObjectId
+  unit          String
+  leaseStart    DateTime
+  leaseEnd      DateTime
+  rentAmount    Float
+  securityDeposit Float   @default(0)
+  status        String    @default("active") // active | pending | expired | evicted
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  user         User       @relation("UserTenants", fields: [userId], references: [id])
+  property     Property   @relation(fields: [propertyId], references: [id])
+  payments     Payment[]
+
+  @@map("tenants")
+}
+
+// ---------------------------------------------------------------------------
+// 7. MAINTENANCE REQUEST
+// ---------------------------------------------------------------------------
+model MaintenanceRequest {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  propertyId    String    @db.ObjectId
+  propertyName  String
+  unit          String
+  title         String
+  description   String
+  category      String    @default("other") // plumbing | electrical | hvac | structural | appliance | pest | other
+  priority      String    @default("medium") // low | medium | high | emergency
+  status        String    @default("open")   // open | in-progress | resolved | closed
+  assignedTo    String?   @db.ObjectId
+  requestedBy   String
+  cost          Float?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  resolvedAt    DateTime?
+
+  // Relations
+  property        Property   @relation(fields: [propertyId], references: [id])
+  assignedUser    User?      @relation("AssignedToUser", fields: [assignedTo], references: [id])
+
+  @@map("maintenance_requests")
+}
+
+// ---------------------------------------------------------------------------
+// 8. AMENITY
+// ---------------------------------------------------------------------------
+model Amenity {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  propertyId      String    @db.ObjectId
+  name            String
+  type            String    @default("other") // gym | pool | clubhouse | bbq | playground | parking | rooftop | lounge | other
+  description     String?
+  capacity        Int       @default(0)
+  openTime        String    @default("06:00")
+  closeTime       String    @default("22:00")
+  requiresBooking Boolean   @default(false)
+  image           String?
+  status          String    @default("available") // available | maintenance | closed
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  property Property   @relation(fields: [propertyId], references: [id])
+  bookings Booking[]
+
+  @@map("amenities")
+}
+
+// ---------------------------------------------------------------------------
+// 9. BOOKING
+// ---------------------------------------------------------------------------
+model Booking {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  propertyId    String    @db.ObjectId
+  propertyName  String
+  amenityId     String    @db.ObjectId
+  amenityName   String
+  userId        String    @db.ObjectId
+  userName      String
+  date          DateTime
+  startTime     String
+  endTime       String
+  status        String    @default("pending") // confirmed | pending | cancelled | completed
+  guestCount    Int?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id])
+  amenity  Amenity  @relation(fields: [amenityId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@map("bookings")
+}
+
+// ---------------------------------------------------------------------------
+// 10. PAYMENT
+// ---------------------------------------------------------------------------
+model Payment {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  tenantId      String    @db.ObjectId
+  propertyId    String    @db.ObjectId
+  userId        String    @db.ObjectId
+  amount        Float
+  type          String    @default("rent") // rent | deposit | fee | refund
+  status        String    @default("pending") // pending | completed | failed | refunded
+  method        String    @default("bank_transfer") // bank_transfer | credit_card | cash | check
+  dueDate       DateTime?
+  paidAt        DateTime?
+  description   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  tenant   Tenant   @relation(fields: [tenantId], references: [id])
+  property Property @relation(fields: [propertyId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// 11. NOTIFICATION
+// ---------------------------------------------------------------------------
+model Notification {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  title     String
+  message   String
+  type      String    @default("info") // info | warning | success | error
+  read      Boolean   @default(false)
+  link      String?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// 12. ACTIVITY LOG
+// ---------------------------------------------------------------------------
+model ActivityLog {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String    @db.ObjectId
+  userName   String
+  userAvatar String?
+  action     String
+  target     String
+  type       String    @default("system") // booking | maintenance | property | payment | user | system
+  createdAt  DateTime  @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}

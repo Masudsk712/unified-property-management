@@ -70,7 +70,7 @@ export default function PropertyDetailPage() {
 
       {/* Hero Image */}
       <motion.div className="relative h-64 lg:h-96 overflow-hidden rounded-xl">
-        <img src={property.image} alt={property.name} className="h-full w-full object-cover" />
+        <img src={property.image ?? undefined} alt={property.name} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute bottom-6 left-6">
           <div className="flex gap-2">

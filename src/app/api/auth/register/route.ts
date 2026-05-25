@@ -1,0 +1,86 @@
+// ============================================================================
+// Auth Register API — POST (sign up)
+// ============================================================================
+
+import { NextRequest } from "next/server";
+import prisma from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+import { signUpSchema } from "@/validations";
+import { successResponse, errorResponse } from "@/lib/auth-helpers";
+import { NextResponse } from "next/server";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const parsed = signUpSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: "Validation failed", details: parsed.error.flatten() },
+        { status: 400 }
+      );
+    }
+
+    const { name, email, password, phone } = parsed.data;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if user already exists
+    const existing = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (existing) {
+      return NextResponse.json(
+        { success: false, error: "A user with this email already exists" },
+        { status: 409 }
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email: normalizedEmail,
+        password: hashedPassword,
+        phone: phone ?? null,
+        role: "tenant",
+      },
+    });
+
+    // Create a welcome notification
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        title: "Welcome!",
+        message: `Welcome to Unified Property Management, ${name}! Your account has been created.`,
+        type: "success",
+      },
+    });
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        userName: name,
+        action: "registered",
+        target: "Account",
+        type: "user",
+      },
+    });
+
+    return successResponse(
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+      },
+      201
+    );
+  } catch (error) {
+    console.error("Register error:", error);
+    return errorResponse("Registration failed. Please try again.", 500);
+  }
+}
