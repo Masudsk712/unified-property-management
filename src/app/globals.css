@@ -106,8 +106,15 @@
   --info-foreground: oklch(0.95 0 0);
 }
 
-* {
+*, *::before, *::after {
+  box-sizing: border-box;
   border-color: var(--border);
+}
+
+html {
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -116,6 +123,81 @@ body {
   font-family: var(--font-sans, "Inter", system-ui, -apple-system, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Responsive container utility */
+.container-responsive {
+  width: 100%;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container-responsive {
+    max-width: 1280px;
+  }
+}
+
+/* Responsive images */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Responsive tables wrapper */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Touch-friendly tap targets */
+@media (max-width: 1023px) {
+  button, a, [role="button"], input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Prevent content overflow from breaking layout */
+.break-words {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Ensure charts don't overflow */
+.recharts-wrapper,
+.recharts-responsive-container {
+  max-width: 100% !important;
+}
+
+/* Fix for fixed sidebar on mobile */
+@media (max-width: 1023px) {
+  .sidebar-open {
+    overflow: hidden;
+  }
 }
 
 /* Custom scrollbar */

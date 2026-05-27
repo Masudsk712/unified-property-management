@@ -1,3 +1,66 @@
-node_modules
-.next
-/src/generated/prisma
+# ============================================================================
+# .gitignore — Unified Property Management
+# ============================================================================
+
+# ── Dependencies ────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Next.js Build ───────────────────────────────────────────────────────────
+.next/
+out/
+build/
+dist/
+
+# ── Environment Variables ───────────────────────────────────────────────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# ── MongoDB Local Data Dirs (development only) ──────────────────────────────
+mongodb-data/
+mongodb-clean-data/
+mongodb-fresh-data/
+*.lock
+mongod.lock
+
+# ── TypeScript ──────────────────────────────────────────────────────────────
+*.tsbuildinfo
+next-env.d.ts
+
+# ── IDE & Editor ────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Debug & Logs ────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# ── Testing ─────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Vercel ──────────────────────────────────────────────────────────────────
+.vercel
+
+# ── Prisma ───────────────────────────────────────────────────────────────────
+# Keep schema but exclude generated client (regenerated on install)
+src/generated/prisma/
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+tmp/
+temp/
+.cache/
+*.tgz

@@ -1,72 +1,128 @@
 "use client";
 
-import { properties } from "@/data/mock";
-import { Badge } from "@/components/ui/badge";
+import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { PropertyCard } from "@/components/properties/property-card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Plus,
   Search,
   Filter,
   MapPin,
-  Users,
-  DollarSign,
   ArrowUpDown,
   Grid3X3,
   List,
-  ChevronRight,
+  X,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
-import { Skeleton } from "@/components/ui/skeleton";
 
-const statusColors: Record<string, "success" | "warning" | "destructive" | "info"> = {
-  occupied: "success",
-  vacant: "destructive",
-  maintenance: "warning",
-  listed: "info",
-};
+const typeOptions = [
+  { value: "", label: "All Types" },
+  { value: "apartment", label: "Apartment" },
+  { value: "house", label: "House" },
+  { value: "condo", label: "Condo" },
+  { value: "commercial", label: "Commercial" },
+  { value: "townhouse", label: "Townhouse" },
+];
 
-const typeColors: Record<string, string> = {
-  apartment: "bg-blue-500/10 text-blue-500",
-  house: "bg-emerald-500/10 text-emerald-500",
-  condo: "bg-violet-500/10 text-violet-500",
-  commercial: "bg-orange-500/10 text-orange-500",
-  townhouse: "bg-pink-500/10 text-pink-500",
-};
+const statusOptions = [
+  { value: "", label: "All Statuses" },
+  { value: "vacant", label: "Vacant" },
+  { value: "occupied", label: "Occupied" },
+  { value: "maintenance", label: "Maintenance" },
+  { value: "listed", label: "Listed" },
+];
+
+const sortOptions = [
+  { value: "newest", label: "Newest First" },
+  { value: "oldest", label: "Oldest First" },
+  { value: "rent-high", label: "Rent: High to Low" },
+  { value: "rent-low", label: "Rent: Low to High" },
+  { value: "name", label: "Name: A-Z" },
+];
 
 export default function PropertiesPage() {
+  const router = useRouter();
+  const [properties, setProperties] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sortBy, setSortBy] = useState("newest");
+  const [showFilters, setShowFilters] = useState(false);
 
-  useEffect(() => {
-    setTimeout(() => setLoading(false), 600);
+  const fetchProperties = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/properties");
+      const result = await res.json();
+      if (!result.success) {
+        setError(result.error ?? "Failed to load properties");
+        return;
+      }
+      setProperties(result.data ?? []);
+    } catch {
+      setError("Failed to fetch properties. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const filtered = properties.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.address.toLowerCase().includes(search.toLowerCase()) ||
-      p.city.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    fetchProperties();
+  }, [fetchProperties]);
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-10 w-96" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <Skeleton key={i} className="h-80 rounded-xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/properties/${id}`, { method: "DELETE" });
+      const result = await res.json();
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to delete property");
+        return;
+      }
+      toast.success("Property deleted successfully");
+      setProperties((prev) => prev.filter((p) => p.id !== id));
+    } catch {
+      toast.error("Failed to delete property");
+    }
+  };
+
+  const filtered = properties
+    .filter((p) => {
+      const matchesSearch =
+        (p.title ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.address ?? "").toLowerCase().includes(search.toLowerCase()) ||
+        (p.city ?? "").toLowerCase().includes(search.toLowerCase());
+      const matchesType = !typeFilter || p.type === typeFilter;
+      const matchesStatus = !statusFilter || p.status === statusFilter;
+      return matchesSearch && matchesType && matchesStatus;
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "rent-high":
+          return (b.rent ?? 0) - (a.rent ?? 0);
+        case "rent-low":
+          return (a.rent ?? 0) - (b.rent ?? 0);
+        case "name":
+          return (a.title ?? "").localeCompare(b.title ?? "");
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+
+  const activeFilters = [typeFilter, statusFilter].filter(Boolean).length;
 
   return (
     <motion.div
@@ -74,19 +130,29 @@ export default function PropertiesPage() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Properties</h1>
-          <p className="text-muted-foreground mt-1">Manage your property portfolio</p>
+          <p className="text-muted-foreground mt-1">
+            {loading ? "Loading..." : `${filtered.length} of ${properties.length} properties`}
+          </p>
         </div>
-        <Link href="/properties/add">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Property
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchProperties} disabled={loading}>
+            <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
-        </Link>
+          <Link href="/properties/add">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Property
+            </Button>
+          </Link>
+        </div>
       </div>
 
+      {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -94,26 +160,43 @@ export default function PropertiesPage() {
             placeholder="Search properties..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-muted/50 pl-10 pr-4 text-sm"
+            className="h-10 w-full rounded-xl border border-input bg-muted/50 pl-10 pr-10 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
           />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Filter className="mr-2 h-4 w-4" /> Filter
+          <Button
+            variant={showFilters ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Filter className="mr-2 h-4 w-4" />
+            Filters
+            {activeFilters > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary-foreground/20 px-1.5 py-0.5 text-xs">{activeFilters}</span>
+            )}
           </Button>
-          <Button variant="outline" size="sm">
-            <ArrowUpDown className="mr-2 h-4 w-4" /> Sort
-          </Button>
-          <div className="flex rounded-lg border border-input p-1">
+          <div className="flex rounded-xl border border-input bg-muted/50 p-1">
             <button
               onClick={() => setView("grid")}
-              className={`rounded-md p-1.5 ${view === "grid" ? "bg-muted" : ""}`}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                view === "grid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <Grid3X3 className="h-4 w-4" />
             </button>
             <button
               onClick={() => setView("list")}
-              className={`rounded-md p-1.5 ${view === "list" ? "bg-muted" : ""}`}
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                view === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <List className="h-4 w-4" />
             </button>
@@ -121,86 +204,120 @@ export default function PropertiesPage() {
         </div>
       </div>
 
-      <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
-        {filtered.map((property) => (
-          <Link key={property.id} href={`/properties/${property.id}`}>
-            <motion.div
-              whileHover={{ y: -4 }}
-              className={
-                view === "grid"
-                  ? "card-lift group overflow-hidden rounded-xl border border-border bg-card"
-                  : "flex items-center gap-4 rounded-xl border border-border bg-card p-4 hover:border-primary/50 transition-all"
-              }
-            >
-              {view === "grid" && (
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={property.image ?? undefined}
-                    alt={property.name}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                    <Badge variant={statusColors[property.status]}>
-                      {property.status}
-                    </Badge>
-                    <Badge variant="glass" className="text-white border-white/20">
-                      <Building2 className="mr-1 h-3 w-3" />
-                      {property.type}
-                    </Badge>
-                  </div>
-                </div>
-              )}
-
-              <div className={view === "grid" ? "p-5" : "flex-1"}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold text-lg">{property.name}</h3>
-                    <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {property.city}, {property.state} {property.zipCode}
-                    </div>
-                  </div>
-                  {view === "list" && (
-                    <Badge variant={statusColors[property.status]}>
-                      {property.status}
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Units</p>
-                    <p className="font-semibold">
-                      {property.occupiedUnits}/{property.units}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Revenue/mo</p>
-                    <p className="font-semibold">{formatCurrency(property.monthlyRevenue)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Occupancy</p>
-                    <p className="font-semibold">
-                      {Math.round((property.occupiedUnits / property.units) * 100)}%
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Type</p>
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium capitalize ${typeColors[property.type]}`}>
-                      {property.type}
-                    </span>
-                  </div>
-                </div>
+      {/* Expanded Filters */}
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl border border-border bg-card">
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Property Type</label>
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-muted/50 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {typeOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-muted/50 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {statusOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Sort By</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-muted/50 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {sortOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              {view === "list" && (
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              )}
-            </motion.div>
-          </Link>
-        ))}
-      </div>
+      {/* Content */}
+      {loading ? (
+        <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className={view === "grid" ? "h-96 rounded-2xl" : "h-32 rounded-2xl"} />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-12 text-center">
+          <div className="rounded-full bg-destructive/10 p-3 w-fit mx-auto mb-4">
+            <Building2 className="h-8 w-8 text-destructive" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Failed to Load Properties</h3>
+          <p className="text-muted-foreground mb-6">{error}</p>
+          <Button onClick={fetchProperties}>
+            <RefreshCw className="mr-2 h-4 w-4" />Try Again
+          </Button>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-border bg-card p-12 text-center">
+          <div className="rounded-full bg-muted p-4 w-fit mx-auto mb-4">
+            <Building2 className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">
+            {search || typeFilter || statusFilter ? "No properties match your filters" : "No Properties Yet"}
+          </h3>
+          <p className="text-muted-foreground mb-6">
+            {search || typeFilter || statusFilter
+              ? "Try adjusting your search or filter criteria."
+              : "Get started by adding your first property."}
+          </p>
+          {(search || typeFilter || statusFilter) ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSearch("");
+                setTypeFilter("");
+                setStatusFilter("");
+              }}
+            >
+              <X className="mr-2 h-4 w-4" />Clear Filters
+            </Button>
+          ) : (
+            <Link href="/properties/add">
+              <Button>
+                <Plus className="mr-2 h-4 w-4" />Add Property
+              </Button>
+            </Link>
+          )}
+        </div>
+      ) : (
+        <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-3"}>
+          {filtered.map((property, index) => (
+            <PropertyCard
+              key={property.id}
+              property={property}
+              view={view}
+              onDelete={handleDelete}
+              index={index}
+            />
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { dashboardStats, activities, properties } from "@/data/mock";
+import { useState, useEffect, Suspense, memo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency, formatNumber, formatPercentage, formatTimeAgo } from "@/lib/utils";
+import { formatCurrency, formatNumber, formatPercentage } from "@/lib/utils";
+import { ActivityFeed } from "@/components/shared/activity-feed";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
 import {
   Building2,
   Users,
@@ -17,31 +17,32 @@ import {
   CalendarDays,
   ArrowRight,
   Plus,
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Activity,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-} from "recharts";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 
-const COLORS = ["#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e"];
+// ── Dynamically import heavy charting to reduce initial bundle ────────────
+const RevenueChart = dynamic(() => import("./_charts/revenue-chart"), {
+  ssr: false,
+  loading: () => <ChartSkeleton />,
+});
 
+const OccupancyChart = dynamic(() => import("./_charts/occupancy-chart"), {
+  ssr: false,
+  loading: () => <ChartSkeleton />,
+});
+
+const RevenueByPropertyChart = dynamic(() => import("./_charts/revenue-by-property-chart"), {
+  ssr: false,
+  loading: () => <ChartSkeleton />,
+});
+
+const MaintenancePieChart = dynamic(() => import("./_charts/maintenance-pie-chart"), {
+  ssr: false,
+  loading: () => <ChartSkeleton />,
+});
+
+// ── Animated Counter (uses requestAnimationFrame instead of setInterval) ──
 function AnimatedCounter({
   value,
   prefix = "",
@@ -54,21 +55,22 @@ function AnimatedCounter({
   duration?: number;
 }) {
   const [count, setCount] = useState(0);
-
   useEffect(() => {
-    let start = 0;
+    let frame: number;
     const end = value;
     const increment = end / (duration * 60);
-    const timer = setInterval(() => {
+    let start = 0;
+    const tick = () => {
       start += increment;
       if (start >= end) {
         setCount(end);
-        clearInterval(timer);
       } else {
         setCount(Math.floor(start));
+        frame = requestAnimationFrame(tick);
       }
-    }, 1000 / 60);
-    return () => clearInterval(timer);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
   }, [value, duration]);
 
   return (
@@ -80,425 +82,9 @@ function AnimatedCounter({
   );
 }
 
-const statCards = [
-  {
-    title: "Total Revenue",
-    value: dashboardStats.totalRevenue,
-    change: dashboardStats.revenueChange,
-    icon: DollarSign,
-    color: "from-emerald-500 to-teal-500",
-    bgColor: "bg-emerald-500/10",
-    format: (v: number) => formatCurrency(v),
-  },
-  {
-    title: "Properties",
-    value: dashboardStats.totalProperties,
-    change: 0,
-    icon: Building2,
-    color: "from-blue-500 to-indigo-500",
-    bgColor: "bg-blue-500/10",
-    format: (v: number) => formatNumber(v),
-  },
-  {
-    title: "Occupancy Rate",
-    value: dashboardStats.occupancyRate,
-    change: dashboardStats.occupancyChange,
-    icon: Users,
-    color: "from-violet-500 to-purple-500",
-    bgColor: "bg-violet-500/10",
-    format: (v: number) => `${v}%`,
-  },
-  {
-    title: "Maintenance",
-    value: dashboardStats.activeMaintenanceRequests,
-    change: dashboardStats.maintenanceChange,
-    icon: Wrench,
-    color: "from-orange-500 to-amber-500",
-    bgColor: "bg-orange-500/10",
-    format: (v: number) => formatNumber(v),
-  },
-];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.5, ease: [0.4, 0, 0.2, 1] as const },
-  },
-};
-
-export default function DashboardPage() {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading) {
-    return <DashboardSkeleton />;
-  }
-
-  return (
-    <motion.div
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      {/* Page Header */}
-      <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">
-            Dashboard
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Welcome back, Alexandra. Here's what's happening across your portfolio.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <CalendarDays className="mr-2 h-4 w-4" />
-            Last 30 days
-          </Button>
-          <Button size="sm">
-            <Plus className="mr-2 h-4 w-4" />
-            Add Property
-          </Button>
-        </div>
-      </motion.div>
-
-      {/* Stats Cards */}
-      <motion.div
-        variants={itemVariants}
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        {statCards.map((card) => (
-          <motion.div
-            key={card.title}
-            whileHover={{ y: -4, transition: { duration: 0.2 } }}
-            className="card-lift group relative overflow-hidden rounded-xl border border-border bg-card p-6"
-          >
-            <div className="flex items-center justify-between">
-              <div className={`rounded-xl ${card.bgColor} p-3`}>
-                <card.icon className={`h-6 w-6 text-${card.color.split("-")[1]}-500`} />
-              </div>
-              {card.change !== 0 && (
-                <Badge
-                  variant={card.change > 0 ? "success" : "destructive"}
-                  className="flex items-center gap-1"
-                >
-                  {card.change > 0 ? (
-                    <TrendingUp className="h-3 w-3" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3" />
-                  )}
-                  {formatPercentage(card.change)}
-                </Badge>
-              )}
-            </div>
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground">{card.title}</p>
-              <p className="text-2xl font-bold tracking-tight mt-1">
-                {card.title === "Total Revenue" ? (
-                  <AnimatedCounter value={card.value} prefix="$" />
-                ) : card.title === "Occupancy Rate" ? (
-                  <AnimatedCounter value={card.value} suffix="%" />
-                ) : (
-                  <AnimatedCounter value={card.value} />
-                )}
-              </p>
-            </div>
-            {/* Gradient background on hover */}
-            <div className={`absolute inset-0 bg-gradient-to-br ${card.color} opacity-0 group-hover:opacity-5 transition-opacity duration-300`} />
-          </motion.div>
-        ))}
-      </motion.div>
-
-      {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Revenue Chart */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-xl border border-border bg-card p-6"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-semibold text-lg">Revenue Trend</h3>
-              <p className="text-sm text-muted-foreground">Monthly revenue overview</p>
-            </div>
-            <Badge variant="success" className="flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              +12.5%
-            </Badge>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={dashboardStats.monthlyRevenue}>
-              <defs>
-                <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.75rem",
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-                }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </motion.div>
-
-        {/* Occupancy Chart */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-xl border border-border bg-card p-6"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-semibold text-lg">Occupancy Rate</h3>
-              <p className="text-sm text-muted-foreground">Portfolio occupancy trend</p>
-            </div>
-            <Badge variant="info" className="flex items-center gap-1">
-              {dashboardStats.occupancyRate}%
-            </Badge>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={dashboardStats.occupancyTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
-              <YAxis
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                domain={[80, 92]}
-                tickFormatter={(v) => `${v}%`}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.75rem",
-                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="rate"
-                stroke="var(--info)"
-                strokeWidth={2}
-                dot={{ fill: "var(--info)", strokeWidth: 2, r: 4 }}
-                activeDot={{ r: 6, strokeWidth: 0 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </motion.div>
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Revenue by Property */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-xl border border-border bg-card p-6 lg:col-span-2"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-semibold text-lg">Revenue by Property</h3>
-              <p className="text-sm text-muted-foreground">Monthly revenue distribution</p>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={dashboardStats.revenueByProperty} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                type="number"
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-              />
-              <YAxis
-                type="category"
-                dataKey="property"
-                stroke="var(--muted-foreground)"
-                fontSize={12}
-                width={120}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.75rem",
-                }}
-              />
-              <Bar dataKey="revenue" radius={[0, 6, 6, 0]} fill="var(--primary)" />
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
-
-        {/* Maintenance by Category */}
-        <motion.div
-          variants={itemVariants}
-          className="rounded-xl border border-border bg-card p-6"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-semibold text-lg">Maintenance</h3>
-              <p className="text-sm text-muted-foreground">By category</p>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={dashboardStats.maintenanceByCategory}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={2}
-                dataKey="count"
-              >
-                {dashboardStats.maintenanceByCategory.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
-                    stroke="var(--card)"
-                    strokeWidth={2}
-                  />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  background: "var(--popover)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "0.75rem",
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            {dashboardStats.maintenanceByCategory.map((item, index) => (
-              <div key={item.category} className="flex items-center gap-2 text-xs">
-                <div
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                />
-                <span className="text-muted-foreground">{item.category}</span>
-                <span className="font-medium ml-auto">{item.count}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Recent Activity */}
-      <motion.div variants={itemVariants} className="rounded-xl border border-border bg-card p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="font-semibold text-lg">Recent Activity</h3>
-            <p className="text-sm text-muted-foreground">Latest actions across your portfolio</p>
-          </div>
-          <Link href="/dashboard/activity">
-            <Button variant="outline" size="sm">
-              View All
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-        <div className="space-y-4">
-          {activities.slice(0, 5).map((activity) => (
-            <motion.div
-              key={activity.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-4 rounded-lg p-3 transition-colors hover:bg-muted/50"
-            >
-              <img
-                src={activity.userAvatar}
-                alt={activity.userName}
-                className="h-10 w-10 rounded-full object-cover ring-2 ring-border"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm">
-                  <span className="font-medium">{activity.userName}</span>{" "}
-                  <span className="text-muted-foreground">{activity.action}</span>{" "}
-                  <span className="font-medium">{activity.target}</span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatTimeAgo(activity.createdAt)}
-                </p>
-              </div>
-              <Badge variant="secondary" className="text-xs">
-                {activity.type}
-              </Badge>
-            </motion.div>
-          ))}
-        </div>
-      </motion.div>
-
-      {/* Quick Actions */}
-      <motion.div
-        variants={itemVariants}
-        className="grid gap-4 sm:grid-cols-3"
-      >
-        {[
-          {
-            title: "Add Property",
-            icon: Building2,
-            href: "/properties/add",
-            color: "bg-blue-500/10 text-blue-500",
-          },
-          {
-            title: "Create Maintenance Request",
-            icon: Wrench,
-            href: "/maintenance/create",
-            color: "bg-orange-500/10 text-orange-500",
-          },
-          {
-            title: "View Bookings",
-            icon: CalendarDays,
-            href: "/amenities/bookings",
-            color: "bg-violet-500/10 text-violet-500",
-          },
-        ].map((action) => (
-          <Link key={action.title} href={action.href}>
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="group flex items-center gap-4 rounded-xl border border-border bg-card p-5 transition-all hover:shadow-lg hover:border-primary/50"
-            >
-              <div className={`rounded-xl p-3 ${action.color}`}>
-                <action.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="font-medium text-sm">{action.title}</p>
-                <p className="text-xs text-muted-foreground">Click to get started</p>
-              </div>
-              <ArrowRight className="ml-auto h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
-            </motion.div>
-          </Link>
-        ))}
-      </motion.div>
-    </motion.div>
-  );
+// ── Skeletons ─────────────────────────────────────────────────────────────
+function ChartSkeleton() {
+  return <Skeleton className="h-[300px] w-full rounded-xl" />;
 }
 
 function DashboardSkeleton() {
@@ -527,6 +113,238 @@ function DashboardSkeleton() {
         <Skeleton className="h-96 rounded-xl" />
         <Skeleton className="h-96 rounded-xl" />
       </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Skeleton className="h-96 rounded-xl lg:col-span-2" />
+        <Skeleton className="h-96 rounded-xl" />
+      </div>
     </div>
+  );
+}
+
+// ── Stat Card (memoized) ──────────────────────────────────────────────────
+const StatCard = memo(function StatCard({
+  title,
+  value,
+  change,
+  icon: Icon,
+  color,
+  bgColor,
+  format,
+}: {
+  title: string;
+  value: number;
+  change: number;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bgColor: string;
+  format: (v: number) => string;
+}) {
+  return (
+    <motion.div
+      whileHover={{ y: -4, transition: { duration: 0.2 } }}
+      className="card-lift group relative overflow-hidden rounded-xl border border-border bg-card p-6"
+    >
+      <div className="flex items-center justify-between">
+        <div className={`rounded-xl ${bgColor} p-3`}>
+          <Icon className="h-6 w-6" />
+        </div>
+        {change !== 0 && (
+          <Badge
+            variant={change > 0 ? "success" : "destructive"}
+            className="flex items-center gap-1"
+          >
+            {change > 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {formatPercentage(change)}
+          </Badge>
+        )}
+      </div>
+      <div className="mt-4">
+        <p className="text-sm text-muted-foreground">{title}</p>
+        <p className="text-2xl font-bold tracking-tight mt-1">
+          {title === "Total Revenue" ? (
+            <AnimatedCounter value={value} prefix="$" />
+          ) : title === "Occupancy Rate" ? (
+            <AnimatedCounter value={value} suffix="%" />
+          ) : (
+            <AnimatedCounter value={value} />
+          )}
+        </p>
+      </div>
+    </motion.div>
+  );
+});
+
+// ── Quick Action Card (memoized) ──────────────────────────────────────────
+const QuickActionCard = memo(function QuickActionCard({
+  title,
+  icon: Icon,
+  href,
+  color,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  href: string;
+  color: string;
+}) {
+  return (
+    <Link href={href}>
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className="group flex items-center gap-4 rounded-xl border border-border bg-card p-5 transition-all hover:shadow-lg hover:border-primary/50"
+      >
+        <div className={`rounded-xl p-3 ${color}`}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="font-medium text-sm">{title}</p>
+          <p className="text-xs text-muted-foreground">Click to get started</p>
+        </div>
+        <ArrowRight className="ml-auto h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
+      </motion.div>
+    </Link>
+  );
+});
+
+// ── Main Dashboard Page ───────────────────────────────────────────────────
+export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (loading) {
+    return <DashboardSkeleton />;
+  }
+
+  // Inline mock data (avoids importing 292-line mock.ts into every bundle)
+  const mockRevenue = [
+    { month: "Jan", revenue: 42000 }, { month: "Feb", revenue: 45000 },
+    { month: "Mar", revenue: 48000 }, { month: "Apr", revenue: 51000 },
+    { month: "May", revenue: 54000 }, { month: "Jun", revenue: 52000 },
+    { month: "Jul", revenue: 58000 }, { month: "Aug", revenue: 61000 },
+    { month: "Sep", revenue: 59000 }, { month: "Oct", revenue: 63000 },
+    { month: "Nov", revenue: 67000 }, { month: "Dec", revenue: 72000 },
+  ];
+
+  const mockOccupancy = [
+    { month: "Jan", rate: 85 }, { month: "Feb", rate: 86 },
+    { month: "Mar", rate: 87 }, { month: "Apr", rate: 88 },
+    { month: "May", rate: 89 }, { month: "Jun", rate: 90 },
+    { month: "Jul", rate: 91 }, { month: "Aug", rate: 90 },
+    { month: "Sep", rate: 89 }, { month: "Oct", rate: 88 },
+    { month: "Nov", rate: 87 }, { month: "Dec", rate: 88 },
+  ];
+
+  const mockRevenueByProperty = [
+    { property: "Skyline Towers", revenue: 72000 },
+    { property: "Harbor View", revenue: 58000 },
+    { property: "Oakwood", revenue: 45000 },
+    { property: "Sunset Villas", revenue: 38000 },
+    { property: "Park Avenue", revenue: 52000 },
+  ];
+
+  const mockMaintenance = [
+    { category: "Plumbing", count: 12 }, { category: "Electrical", count: 8 },
+    { category: "HVAC", count: 15 }, { category: "Structural", count: 5 },
+    { category: "Appliance", count: 10 }, { category: "Other", count: 6 },
+  ];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="space-y-6"
+    >
+      {/* Page Header */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      >
+        <div>
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back. Here's what's happening across your portfolio.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm">
+            <CalendarDays className="mr-2 h-4 w-4" />
+            Last 30 days
+          </Button>
+          <Button size="sm">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Property
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Total Revenue" value={723000} change={12.5}
+          icon={DollarSign} color="from-emerald-500 to-teal-500"
+          bgColor="bg-emerald-500/10" format={formatCurrency}
+        />
+        <StatCard
+          title="Properties" value={24} change={0}
+          icon={Building2} color="from-blue-500 to-indigo-500"
+          bgColor="bg-blue-500/10" format={formatNumber}
+        />
+        <StatCard
+          title="Occupancy Rate" value={88} change={-1.2}
+          icon={Users} color="from-violet-500 to-purple-500"
+          bgColor="bg-violet-500/10" format={(v) => `${v}%`}
+        />
+        <StatCard
+          title="Maintenance" value={56} change={-8.3}
+          icon={Wrench} color="from-orange-500 to-amber-500"
+          bgColor="bg-orange-500/10" format={formatNumber}
+        />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Suspense fallback={<ChartSkeleton />}>
+          <RevenueChart data={mockRevenue} />
+        </Suspense>
+        <Suspense fallback={<ChartSkeleton />}>
+          <OccupancyChart data={mockOccupancy} rate={88} />
+        </Suspense>
+      </div>
+
+      {/* Bottom Row */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Suspense fallback={<ChartSkeleton />}>
+          <RevenueByPropertyChart data={mockRevenueByProperty} />
+        </Suspense>
+        <Suspense fallback={<ChartSkeleton />}>
+          <MaintenancePieChart data={mockMaintenance} />
+        </Suspense>
+      </div>
+
+      {/* Activity Feed */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-xl border border-border bg-card p-6"
+      >
+        <ActivityFeed limit={5} />
+      </motion.div>
+
+      {/* Quick Actions */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="grid gap-4 sm:grid-cols-3"
+      >
+        <QuickActionCard title="Add Property" icon={Building2} href="/properties/add" color="bg-blue-500/10 text-blue-500" />
+        <QuickActionCard title="Create Maintenance Request" icon={Wrench} href="/maintenance/create" color="bg-orange-500/10 text-orange-500" />
+        <QuickActionCard title="View Bookings" icon={CalendarDays} href="/amenities/bookings" color="bg-violet-500/10 text-violet-500" />
+      </motion.div>
+    </motion.div>
   );
 }

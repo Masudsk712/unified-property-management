@@ -79,8 +79,49 @@ export async function POST(req: NextRequest) {
       },
       201
     );
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Register error:", error);
+
+    // Prisma unique constraint violation (duplicate email)
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code: string }).code === "P2002"
+    ) {
+      return NextResponse.json(
+        { success: false, error: "A user with this email already exists" },
+        { status: 409 }
+      );
+    }
+
+    // Prisma connection/network errors
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error
+    ) {
+      const code = (error as { code: string }).code;
+      // P2010, P2021, P2024, P2025: connection, table-not-found, etc.
+      if (
+        code === "P2010" ||
+        code === "P2021" ||
+        code === "P2024" ||
+        code === "P2025"
+      ) {
+        console.error(`[REGISTER] Prisma error ${code}:`, error);
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Database service is temporarily unavailable. Please try again later.",
+          },
+          { status: 503 }
+        );
+      }
+    }
+
+    // Generic server error
     return errorResponse("Registration failed. Please try again.", 500);
   }
 }

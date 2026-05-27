@@ -1,6 +1,6 @@
 // ============================================================================
-// Repository Layer — Thin Data-Access Wrappers over Prisma
-// Each function returns a plain query; services add business logic.
+// Repository Layer — Optimized Data-Access Wrappers over Prisma
+// Uses selective field projection, pagination, and minimal includes.
 // ============================================================================
 
 import prisma from "@/lib/prisma";
@@ -16,30 +16,114 @@ import type {
   CreateActivityLogInput,
 } from "@/validations";
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+type Pagination = { page?: number; limit?: number };
+type PaginatedResult<T> = { data: T[]; total: number; page: number; limit: number; totalPages: number };
+
+async function paginate<T>(
+  queryFn: () => Promise<T[]>,
+  countFn: () => Promise<number>,
+  { page = 1, limit = 20 }: Pagination
+): Promise<PaginatedResult<T>> {
+  const [data, total] = await Promise.all([queryFn(), countFn()]);
+  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Properties
 // ────────────────────────────────────────────────────────────────────────────
 export const propertyRepo = {
-  findAll() {
-    return prisma.property.findMany({ orderBy: { createdAt: "desc" } });
+  /** Lightweight list — only fields needed for cards/lists */
+  findAll(pagination?: Pagination) {
+    const { page = 1, limit = 20 } = pagination ?? {};
+    const select = {
+      id: true, title: true, name: true, type: true, status: true,
+      city: true, state: true, rent: true, bedrooms: true, bathrooms: true,
+      area: true, image: true, images: true, units: true, occupiedUnits: true,
+      monthlyRevenue: true, createdAt: true,
+    } as const;
+    const query = () =>
+      prisma.property.findMany({
+        select,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    const count = () => prisma.property.count();
+    return paginate(query, count, { page, limit });
   },
+
+  /** Full detail with relations */
   findById(id: string) {
     return prisma.property.findUnique({
       where: { id },
-      include: { tenants: true, maintenanceRequests: true },
+      include: {
+        tenants: { select: { id: true, unit: true, status: true, user: { select: { name: true, email: true } } } },
+        maintenanceRequests: { select: { id: true, title: true, status: true, priority: true, createdAt: true }, take: 5, orderBy: { createdAt: "desc" } },
+      },
     });
   },
+
   create(input: CreatePropertyInput) {
-    return prisma.property.create({ data: input });
+    return prisma.property.create({ data: input as any });
   },
+
   update(id: string, input: UpdatePropertyInput) {
-    return prisma.property.update({ where: { id }, data: input });
+    return prisma.property.update({ where: { id }, data: input as any });
   },
+
   delete(id: string) {
     return prisma.property.delete({ where: { id } });
   },
+
   count() {
     return prisma.property.count();
+  },
+
+  countByStatus() {
+    return prisma.property.groupBy({ by: ["status"], _count: true });
+  },
+
+  countByType() {
+    return prisma.property.groupBy({ by: ["type"], _count: true });
+  },
+
+  /** Optimized analytics — single aggregate query */
+  async getAnalytics() {
+    const [total, statusBreakdown, typeBreakdown, aggregates] = await Promise.all([
+      prisma.property.count(),
+      prisma.property.groupBy({ by: ["status"], _count: true, _sum: { rent: true } }),
+      prisma.property.groupBy({ by: ["type"], _count: true }),
+      // Use aggregate to avoid fetching all records
+      prisma.property.aggregate({
+        _sum: { rent: true, monthlyRevenue: true, units: true, occupiedUnits: true },
+      }),
+    ]);
+
+    // City breakdown via lightweight groupBy
+    const cityBreakdown = await prisma.property.groupBy({
+      by: ["city"],
+      _count: true,
+    });
+
+    const totalRent = aggregates._sum.rent ?? 0;
+    const totalRevenue = aggregates._sum.monthlyRevenue ?? 0;
+    const totalUnits = aggregates._sum.units ?? 0;
+    const occupiedUnits = aggregates._sum.occupiedUnits ?? 0;
+    const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+
+    return {
+      total,
+      totalRent,
+      totalRevenue,
+      totalUnits,
+      occupiedUnits,
+      occupancyRate: Math.round(occupancyRate * 100) / 100,
+      statusBreakdown: statusBreakdown.map(s => ({ status: s.status, count: s._count, totalRent: s._sum.rent ?? 0 })),
+      typeBreakdown: typeBreakdown.map(t => ({ type: t.type, count: t._count })),
+      cityBreakdown: cityBreakdown.map(({ city, _count }) => ({ city, count: _count })),
+    };
   },
 };
 
@@ -47,39 +131,61 @@ export const propertyRepo = {
 // Tenants
 // ────────────────────────────────────────────────────────────────────────────
 export const tenantRepo = {
-  findAll() {
-    return prisma.tenant.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { user: true, property: true },
-    });
+  findAll(pagination?: Pagination) {
+    const { page = 1, limit = 20 } = pagination ?? {};
+    const select = {
+      id: true, unit: true, status: true, leaseStart: true, leaseEnd: true,
+      rentAmount: true, securityDeposit: true, createdAt: true,
+      user: { select: { id: true, name: true, email: true, phone: true } },
+      property: { select: { id: true, name: true, address: true, city: true } },
+    } as const;
+    const query = () =>
+      prisma.tenant.findMany({
+        select,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    const count = () => prisma.tenant.count();
+    return paginate(query, count, { page, limit });
   },
+
   findByProperty(propertyId: string) {
     return prisma.tenant.findMany({
       where: { propertyId },
-      include: { user: true },
+      select: { id: true, unit: true, status: true, rentAmount: true, leaseEnd: true, user: { select: { name: true, email: true } } },
     });
   },
+
   findByUser(userId: string) {
     return prisma.tenant.findMany({
       where: { userId },
-      include: { property: true },
+      select: { id: true, unit: true, status: true, rentAmount: true, leaseEnd: true, property: { select: { name: true, address: true } } },
     });
   },
+
   findById(id: string) {
     return prisma.tenant.findUnique({
       where: { id },
-      include: { user: true, property: true },
+      include: {
+        user: { select: { id: true, name: true, email: true, phone: true, image: true } },
+        property: { select: { id: true, name: true, address: true, city: true, state: true } },
+      },
     });
   },
+
   create(input: CreateTenantInput) {
-    return prisma.tenant.create({ data: input });
+    return prisma.tenant.create({ data: input as any });
   },
+
   update(id: string, data: Partial<CreateTenantInput>) {
-    return prisma.tenant.update({ where: { id }, data });
+    return prisma.tenant.update({ where: { id }, data: data as any });
   },
+
   delete(id: string) {
     return prisma.tenant.delete({ where: { id } });
   },
+
   count() {
     return prisma.tenant.count();
   },
@@ -89,45 +195,61 @@ export const tenantRepo = {
 // Maintenance
 // ────────────────────────────────────────────────────────────────────────────
 export const maintenanceRepo = {
-  findAll() {
-    return prisma.maintenanceRequest.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { property: true, assignedUser: true },
-    });
+  findAll(pagination?: Pagination) {
+    const { page = 1, limit = 20 } = pagination ?? {};
+    const select = {
+      id: true, title: true, category: true, priority: true, status: true,
+      unit: true, propertyName: true, createdAt: true, updatedAt: true,
+      property: { select: { id: true, name: true } },
+      assignedUser: { select: { id: true, name: true } },
+    } as const;
+    const query = () =>
+      prisma.maintenanceRequest.findMany({
+        select,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    const count = () => prisma.maintenanceRequest.count();
+    return paginate(query, count, { page, limit });
   },
+
   findByProperty(propertyId: string) {
     return prisma.maintenanceRequest.findMany({
       where: { propertyId },
       orderBy: { createdAt: "desc" },
-      include: { assignedUser: true },
+      select: { id: true, title: true, status: true, priority: true, createdAt: true, assignedUser: { select: { name: true } } },
     });
   },
+
   findById(id: string) {
     return prisma.maintenanceRequest.findUnique({
       where: { id },
-      include: { property: true, assignedUser: true },
+      include: {
+        property: { select: { id: true, name: true, address: true } },
+        assignedUser: { select: { id: true, name: true, email: true } },
+      },
     });
   },
+
   create(input: CreateMaintenanceInput) {
-    return prisma.maintenanceRequest.create({ data: input });
+    return prisma.maintenanceRequest.create({ data: input as any });
   },
+
   update(id: string, data: Partial<CreateMaintenanceInput> & { resolvedAt?: Date }) {
-    return prisma.maintenanceRequest.update({ where: { id }, data });
+    return prisma.maintenanceRequest.update({ where: { id }, data: data as any });
   },
+
   delete(id: string) {
     return prisma.maintenanceRequest.delete({ where: { id } });
   },
+
   countByStatus() {
-    return prisma.maintenanceRequest.groupBy({
-      by: ["status"],
-      _count: true,
-    });
+    return prisma.maintenanceRequest.groupBy({ by: ["status"], _count: true });
   },
+
   countByCategory() {
-    return prisma.maintenanceRequest.groupBy({
-      by: ["category"],
-      _count: true,
-    });
+    return prisma.maintenanceRequest.groupBy({ by: ["category"], _count: true });
   },
 };
 
@@ -135,30 +257,47 @@ export const maintenanceRepo = {
 // Amenities
 // ────────────────────────────────────────────────────────────────────────────
 export const amenityRepo = {
-  findAll() {
-    return prisma.amenity.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { property: true },
-    });
+  findAll(pagination?: Pagination) {
+    const { page = 1, limit = 20 } = pagination ?? {};
+    const select = {
+      id: true, name: true, type: true, status: true, capacity: true,
+      openTime: true, closeTime: true, requiresBooking: true, image: true,
+      property: { select: { id: true, name: true } },
+    } as const;
+    const query = () =>
+      prisma.amenity.findMany({
+        select,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    const count = () => prisma.amenity.count();
+    return paginate(query, count, { page, limit });
   },
+
   findByProperty(propertyId: string) {
     return prisma.amenity.findMany({
       where: { propertyId },
       orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, type: true, status: true },
     });
   },
+
   findById(id: string) {
     return prisma.amenity.findUnique({
       where: { id },
-      include: { property: true },
+      include: { property: { select: { id: true, name: true } } },
     });
   },
+
   create(input: CreateAmenityInput) {
-    return prisma.amenity.create({ data: input });
+    return prisma.amenity.create({ data: input as any });
   },
+
   update(id: string, data: Partial<CreateAmenityInput>) {
-    return prisma.amenity.update({ where: { id }, data });
+    return prisma.amenity.update({ where: { id }, data: data as any });
   },
+
   delete(id: string) {
     return prisma.amenity.delete({ where: { id } });
   },
@@ -168,41 +307,65 @@ export const amenityRepo = {
 // Bookings
 // ────────────────────────────────────────────────────────────────────────────
 export const bookingRepo = {
-  findAll() {
-    return prisma.booking.findMany({
-      orderBy: { date: "desc" },
-      include: { property: true, amenity: true, user: true },
-    });
+  findAll(pagination?: Pagination) {
+    const { page = 1, limit = 20 } = pagination ?? {};
+    const select = {
+      id: true, date: true, startTime: true, endTime: true, status: true,
+      guestCount: true, propertyName: true, amenityName: true,
+      property: { select: { id: true, name: true } },
+      amenity: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true, email: true } },
+    } as const;
+    const query = () =>
+      prisma.booking.findMany({
+        select,
+        orderBy: { date: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    const count = () => prisma.booking.count();
+    return paginate(query, count, { page, limit });
   },
+
   findByProperty(propertyId: string) {
     return prisma.booking.findMany({
       where: { propertyId },
       orderBy: { date: "desc" },
-      include: { amenity: true, user: true },
+      select: { id: true, date: true, status: true, amenityName: true, user: { select: { name: true } } },
     });
   },
+
   findByUser(userId: string) {
     return prisma.booking.findMany({
       where: { userId },
       orderBy: { date: "desc" },
-      include: { property: true, amenity: true },
+      select: { id: true, date: true, status: true, propertyName: true, amenityName: true },
     });
   },
+
   findById(id: string) {
     return prisma.booking.findUnique({
       where: { id },
-      include: { property: true, amenity: true, user: true },
+      include: {
+        property: { select: { id: true, name: true } },
+        amenity: { select: { id: true, name: true, type: true } },
+        user: { select: { id: true, name: true, email: true } },
+      },
     });
   },
+
   create(input: CreateBookingInput) {
-    return prisma.booking.create({ data: input });
+    return prisma.booking.create({ data: input as any });
   },
+
   update(id: string, data: Partial<CreateBookingInput>) {
-    return prisma.booking.update({ where: { id }, data });
+    return prisma.booking.update({ where: { id }, data: data as any });
   },
+
   delete(id: string) {
     return prisma.booking.delete({ where: { id } });
   },
+
   count() {
     return prisma.booking.count();
   },
@@ -212,23 +375,43 @@ export const bookingRepo = {
 // Payments
 // ────────────────────────────────────────────────────────────────────────────
 export const paymentRepo = {
-  findAll() {
-    return prisma.payment.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { tenant: true, property: true, user: true },
-    });
+  findAll(pagination?: Pagination) {
+    const { page = 1, limit = 20 } = pagination ?? {};
+    const select = {
+      id: true, amount: true, type: true, status: true, method: true,
+      dueDate: true, paidAt: true, createdAt: true,
+      tenant: { select: { id: true, unit: true } },
+      property: { select: { id: true, name: true } },
+      user: { select: { id: true, name: true } },
+    } as const;
+    const query = () =>
+      prisma.payment.findMany({
+        select,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      });
+    const count = () => prisma.payment.count();
+    return paginate(query, count, { page, limit });
   },
+
   findById(id: string) {
     return prisma.payment.findUnique({
       where: { id },
-      include: { tenant: true, property: true, user: true },
+      include: {
+        tenant: { select: { id: true, unit: true } },
+        property: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true } },
+      },
     });
   },
+
   create(input: CreatePaymentInput) {
-    return prisma.payment.create({ data: input });
+    return prisma.payment.create({ data: input as any });
   },
+
   update(id: string, data: Partial<CreatePaymentInput>) {
-    return prisma.payment.update({ where: { id }, data });
+    return prisma.payment.update({ where: { id }, data: data as any });
   },
 };
 
@@ -236,31 +419,32 @@ export const paymentRepo = {
 // Notifications
 // ────────────────────────────────────────────────────────────────────────────
 export const notificationRepo = {
-  findByUser(userId: string) {
+  findByUser(userId: string, limit = 50) {
     return prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { id: true, title: true, message: true, type: true, read: true, link: true, createdAt: true },
     });
   },
+
   create(input: CreateNotificationInput) {
-    return prisma.notification.create({ data: input });
+    return prisma.notification.create({ data: input as any });
   },
+
   markRead(id: string) {
-    return prisma.notification.update({
-      where: { id },
-      data: { read: true },
-    });
+    return prisma.notification.update({ where: { id }, data: { read: true } });
   },
+
   markAllRead(userId: string) {
     return prisma.notification.updateMany({
       where: { userId, read: false },
       data: { read: true },
     });
   },
+
   countUnread(userId: string) {
-    return prisma.notification.count({
-      where: { userId, read: false },
-    });
+    return prisma.notification.count({ where: { userId, read: false } });
   },
 };
 
@@ -272,15 +456,17 @@ export const activityLogRepo = {
     return prisma.activityLog.findMany({
       orderBy: { createdAt: "desc" },
       take: limit,
+      select: { id: true, userId: true, userName: true, userAvatar: true, action: true, target: true, type: true, createdAt: true },
     });
   },
+
   create(input: CreateActivityLogInput) {
-    return prisma.activityLog.create({ data: input });
+    return prisma.activityLog.create({ data: input as any });
   },
 };
 
 // ────────────────────────────────────────────────────────────────────────────
-// Dashboard Aggregate
+// Dashboard Aggregate (fully optimized)
 // ────────────────────────────────────────────────────────────────────────────
 export const dashboardRepo = {
   async getStats(): Promise<{
@@ -291,11 +477,11 @@ export const dashboardRepo = {
     activeMaintenance: number;
     totalBookings: number;
   }> {
-    const [propertyCount, properties, maintenanceCount, bookingCount] =
+    const [propertyCount, aggregates, maintenanceCount, bookingCount] =
       await Promise.all([
         prisma.property.count(),
-        prisma.property.findMany({
-          select: { units: true, occupiedUnits: true, monthlyRevenue: true },
+        prisma.property.aggregate({
+          _sum: { units: true, occupiedUnits: true, monthlyRevenue: true },
         }),
         prisma.maintenanceRequest.count({
           where: { status: { in: ["open", "in-progress"] } },
@@ -303,13 +489,11 @@ export const dashboardRepo = {
         prisma.booking.count(),
       ]);
 
-    const agg = properties as { units: number; occupiedUnits: number; monthlyRevenue: number }[];
-
     return {
       totalProperties: propertyCount,
-      totalUnits: agg.reduce((s, p) => s + p.units, 0),
-      occupiedUnits: agg.reduce((s, p) => s + p.occupiedUnits, 0),
-      totalRevenue: agg.reduce((s, p) => s + p.monthlyRevenue, 0),
+      totalUnits: aggregates._sum.units ?? 0,
+      occupiedUnits: aggregates._sum.occupiedUnits ?? 0,
+      totalRevenue: aggregates._sum.monthlyRevenue ?? 0,
       activeMaintenance: maintenanceCount,
       totalBookings: bookingCount,
     };

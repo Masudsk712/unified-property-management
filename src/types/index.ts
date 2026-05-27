@@ -33,23 +33,28 @@ export type PropertyStatus = "occupied" | "vacant" | "maintenance" | "listed";
 
 export interface Property {
   id: string;
+  title: string;
   name: string;
+  description?: string | null;
+  type: PropertyType;
+  status: PropertyStatus;
   address: string;
   city: string;
   state: string;
   zipCode: string;
-  type: PropertyType;
-  status: PropertyStatus;
+  rent: number;
+  securityDeposit: number;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  area?: number | null;
+  squareFeet?: number | null;
+  amenities: string[];
+  images: string[];
+  image?: string | null;
   units: number;
   occupiedUnits: number;
   monthlyRevenue: number;
-  image?: string | null;
-  description?: string | null;
-  amenities: string[];
   yearBuilt?: number | null;
-  squareFeet?: number | null;
-  bedrooms?: number | null;
-  bathrooms?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

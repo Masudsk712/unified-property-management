@@ -3,7 +3,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { SessionProvider } from "next-auth/react";
+import { Toaster } from "sonner";
 import { useState, type ReactNode } from "react";
+import { LightboxProvider } from "@/components/shared/image-lightbox";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -27,7 +29,20 @@ export function Providers({ children }: { children: ReactNode }) {
         enableSystem
         disableTransitionOnChange
       >
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <LightboxProvider>
+          <QueryClientProvider client={queryClient}>
+            {children}
+            <Toaster
+              position="bottom-right"
+              richColors
+              closeButton
+              toastOptions={{
+                duration: 4000,
+                className: "rounded-xl border border-border",
+              }}
+            />
+          </QueryClientProvider>
+        </LightboxProvider>
       </ThemeProvider>
     </SessionProvider>
   );

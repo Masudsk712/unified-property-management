@@ -28,16 +28,52 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Relations
-  accounts        Account[]
-  sessions        Session[]
-  tenants         Tenant[]           @relation("UserTenants")
-  bookings        Booking[]
-  notifications   Notification[]
-  activityLogs    ActivityLog[]
-  assignedMaintenance MaintenanceRequest[] @relation("AssignedToUser")
-  payments        Payment[]
+  accounts            Account[]
+  sessions            Session[]
+  tenants             Tenant[]               @relation("UserTenants")
+  bookings            Booking[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+  assignedMaintenance MaintenanceRequest[]   @relation("AssignedToUser")
+  payments            Payment[]
+  uploadedFiles       File[]                 @relation("UploadedByUser")
 
+  @@index([role])
+  @@index([email])
   @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// 1A. FILE — Uploaded files (property images, tenant docs, maintenance photos)
+// ---------------------------------------------------------------------------
+model File {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  url          String                            // Cloudinary URL
+  publicId     String?                           // Cloudinary public_id for deletion
+  filename     String                            // Original filename
+  originalName String                            // Original name from user's machine
+  mimeType     String                            // e.g. image/jpeg, application/pdf
+  size         Int                               // File size in bytes
+  width        Int?                              // Image width (if image)
+  height       Int?                              // Image height (if image)
+  format       String?                           // e.g. jpg, png, pdf
+  resourceType String   @default("image")        // image | video | raw
+  folder       String   @default("general")      // properties | tenants | maintenance | general
+  entityId     String?                           // Associated entity ID (property, tenant, maintenance)
+  entityType   String?                           // property | tenant | maintenance
+  uploadedBy   String   @db.ObjectId             // User who uploaded
+  isDeleted    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  uploader User @relation("UploadedByUser", fields: [uploadedBy], references: [id])
+
+  @@index([entityId, entityType])
+  @@index([uploadedBy])
+  @@index([folder])
+  @@index([createdAt])
+  @@map("files")
 }
 
 // ---------------------------------------------------------------------------
@@ -60,6 +96,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -74,6 +111,8 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
+  @@index([expires])
   @@map("sessions")
 }
 
@@ -87,6 +126,7 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+  @@index([expires])
   @@map("verification_tokens")
 }
 
@@ -94,26 +134,31 @@ model VerificationToken {
 // 5. PROPERTY
 // ---------------------------------------------------------------------------
 model Property {
-  id             String    @id @default(auto()) @map("_id") @db.ObjectId
-  name           String
-  address        String
-  city           String
-  state          String
-  zipCode        String
-  type           String    @default("apartment") // apartment | house | condo | commercial | townhouse
-  status         String    @default("vacant")     // occupied | vacant | maintenance | listed
-  units          Int       @default(0)
-  occupiedUnits  Int       @default(0)
-  monthlyRevenue Float     @default(0)
-  image          String?
-  description    String?
-  amenities      String[]  @default([])
-  yearBuilt      Int?
-  squareFeet     Float?
-  bedrooms       Int?
-  bathrooms      Int?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  title           String
+  name            String
+  description     String?
+  type            String    @default("apartment") // apartment | house | condo | commercial | townhouse
+  status          String    @default("vacant")     // occupied | vacant | maintenance | listed
+  address         String
+  city            String
+  state           String
+  zipCode         String
+  rent            Float     @default(0)
+  securityDeposit Float     @default(0)
+  bedrooms        Int?
+  bathrooms       Int?
+  area            Float?
+  squareFeet      Float?
+  amenities       String[]  @default([])
+  images          String[]  @default([])
+  image           String?
+  units           Int       @default(0)
+  occupiedUnits   Int       @default(0)
+  monthlyRevenue  Float     @default(0)
+  yearBuilt       Int?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   tenants              Tenant[]
@@ -122,6 +167,12 @@ model Property {
   amenitiesRef         Amenity[]
   payments             Payment[]
 
+  @@index([type])
+  @@index([status])
+  @@index([city])
+  @@index([state])
+  @@index([createdAt])
+  @@index([status, type])
   @@map("properties")
 }
 
@@ -129,23 +180,28 @@ model Property {
 // 6. TENANT
 // ---------------------------------------------------------------------------
 model Tenant {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  userId        String    @db.ObjectId
-  propertyId    String    @db.ObjectId
-  unit          String
-  leaseStart    DateTime
-  leaseEnd      DateTime
-  rentAmount    Float
-  securityDeposit Float   @default(0)
-  status        String    @default("active") // active | pending | expired | evicted
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String   @db.ObjectId
+  propertyId      String   @db.ObjectId
+  unit            String
+  leaseStart      DateTime
+  leaseEnd        DateTime
+  rentAmount      Float
+  securityDeposit Float    @default(0)
+  status          String   @default("active") // active | pending | expired | evicted
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
-  user         User       @relation("UserTenants", fields: [userId], references: [id])
-  property     Property   @relation(fields: [propertyId], references: [id])
-  payments     Payment[]
+  user     User      @relation("UserTenants", fields: [userId], references: [id])
+  property Property  @relation(fields: [propertyId], references: [id])
+  payments Payment[]
 
+  @@index([userId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([leaseEnd])
+  @@index([propertyId, status])
   @@map("tenants")
 }
 
@@ -153,26 +209,33 @@ model Tenant {
 // 7. MAINTENANCE REQUEST
 // ---------------------------------------------------------------------------
 model MaintenanceRequest {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  propertyId    String    @db.ObjectId
-  propertyName  String
-  unit          String
-  title         String
-  description   String
-  category      String    @default("other") // plumbing | electrical | hvac | structural | appliance | pest | other
-  priority      String    @default("medium") // low | medium | high | emergency
-  status        String    @default("open")   // open | in-progress | resolved | closed
-  assignedTo    String?   @db.ObjectId
-  requestedBy   String
-  cost          Float?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  resolvedAt    DateTime?
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  propertyId   String    @db.ObjectId
+  propertyName String
+  unit         String
+  title        String
+  description  String
+  category     String    @default("other") // plumbing | electrical | hvac | structural | appliance | pest | other
+  priority     String    @default("medium") // low | medium | high | emergency
+  status       String    @default("open")   // open | in-progress | resolved | closed
+  assignedTo   String?   @db.ObjectId
+  requestedBy  String
+  cost         Float?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  resolvedAt   DateTime?
 
   // Relations
-  property        Property   @relation(fields: [propertyId], references: [id])
-  assignedUser    User?      @relation("AssignedToUser", fields: [assignedTo], references: [id])
+  property     Property @relation(fields: [propertyId], references: [id])
+  assignedUser User?    @relation("AssignedToUser", fields: [assignedTo], references: [id])
 
+  @@index([propertyId])
+  @@index([assignedTo])
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([createdAt])
+  @@index([status, priority])
   @@map("maintenance_requests")
 }
 
@@ -195,9 +258,12 @@ model Amenity {
   updatedAt       DateTime  @updatedAt
 
   // Relations
-  property Property   @relation(fields: [propertyId], references: [id])
+  property Property  @relation(fields: [propertyId], references: [id])
   bookings Booking[]
 
+  @@index([propertyId])
+  @@index([type])
+  @@index([status])
   @@map("amenities")
 }
 
@@ -205,27 +271,33 @@ model Amenity {
 // 9. BOOKING
 // ---------------------------------------------------------------------------
 model Booking {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  propertyId    String    @db.ObjectId
-  propertyName  String
-  amenityId     String    @db.ObjectId
-  amenityName   String
-  userId        String    @db.ObjectId
-  userName      String
-  date          DateTime
-  startTime     String
-  endTime       String
-  status        String    @default("pending") // confirmed | pending | cancelled | completed
-  guestCount    Int?
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  propertyId   String    @db.ObjectId
+  propertyName String
+  amenityId    String    @db.ObjectId
+  amenityName  String
+  userId       String    @db.ObjectId
+  userName     String
+  date         DateTime
+  startTime    String
+  endTime      String
+  status       String    @default("pending") // confirmed | pending | cancelled | completed
+  guestCount   Int?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   // Relations
   property Property @relation(fields: [propertyId], references: [id])
   amenity  Amenity  @relation(fields: [amenityId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
 
+  @@index([propertyId])
+  @@index([amenityId])
+  @@index([userId])
+  @@index([date])
+  @@index([status])
+  @@index([amenityId, date])
   @@map("bookings")
 }
 
@@ -233,25 +305,31 @@ model Booking {
 // 10. PAYMENT
 // ---------------------------------------------------------------------------
 model Payment {
-  id            String    @id @default(auto()) @map("_id") @db.ObjectId
-  tenantId      String    @db.ObjectId
-  propertyId    String    @db.ObjectId
-  userId        String    @db.ObjectId
-  amount        Float
-  type          String    @default("rent") // rent | deposit | fee | refund
-  status        String    @default("pending") // pending | completed | failed | refunded
-  method        String    @default("bank_transfer") // bank_transfer | credit_card | cash | check
-  dueDate       DateTime?
-  paidAt        DateTime?
-  description   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  tenantId    String    @db.ObjectId
+  propertyId  String    @db.ObjectId
+  userId      String    @db.ObjectId
+  amount      Float
+  type        String    @default("rent") // rent | deposit | fee | refund
+  status      String    @default("pending") // pending | completed | failed | refunded
+  method      String    @default("bank_transfer") // bank_transfer | credit_card | cash | check
+  dueDate     DateTime?
+  paidAt      DateTime?
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   tenant   Tenant   @relation(fields: [tenantId], references: [id])
   property Property @relation(fields: [propertyId], references: [id])
   user     User     @relation(fields: [userId], references: [id])
 
+  @@index([tenantId])
+  @@index([propertyId])
+  @@index([userId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([createdAt])
   @@map("payments")
 }
 
@@ -271,6 +349,10 @@ model Notification {
   // Relations
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@index([userId, read])
   @@map("notifications")
 }
 
@@ -290,5 +372,9 @@ model ActivityLog {
   // Relations
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([type, createdAt])
   @@map("activity_logs")
 }

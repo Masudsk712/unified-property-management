@@ -33,23 +33,28 @@ export type SignInInput = z.infer<typeof signInSchema>;
 
 // ── Properties ────────────────────────────────────────────────────────────
 export const createPropertySchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters").max(200),
   name: z.string().min(2).max(200),
-  address: z.string().min(5).max(300),
+  description: z.string().min(10, "Description must be at least 10 characters").max(5000).optional().or(z.literal("")),
+  type: z.enum(["apartment", "house", "condo", "commercial", "townhouse"]),
+  status: z.enum(["occupied", "vacant", "maintenance", "listed"]).default("vacant"),
+  address: z.string().min(5, "Address is required").max(300),
   city: z.string().min(2).max(100),
   state: z.string().min(2).max(50),
   zipCode: z.string().min(4).max(15),
-  type: z.enum(["apartment", "house", "condo", "commercial", "townhouse"]),
-  status: z.enum(["occupied", "vacant", "maintenance", "listed"]).default("vacant"),
+  rent: z.number().min(0, "Rent must be a positive number"),
+  securityDeposit: z.number().min(0).default(0),
+  bedrooms: z.number().int().min(0).optional(),
+  bathrooms: z.number().min(0).optional(),
+  area: z.number().min(0).optional(),
+  squareFeet: z.number().optional(),
+  amenities: z.array(z.string()).default([]),
+  images: z.array(z.string()).default([]),
+  image: optionalString,
   units: z.number().int().min(0).default(0),
   occupiedUnits: z.number().int().min(0).default(0),
   monthlyRevenue: z.number().min(0).default(0),
-  image: optionalString,
-  description: optionalString,
-  amenities: z.array(z.string()).default([]),
   yearBuilt: z.number().int().optional(),
-  squareFeet: z.number().optional(),
-  bedrooms: z.number().int().optional(),
-  bathrooms: z.number().optional(),
 });
 
 export const updatePropertySchema = createPropertySchema.partial();

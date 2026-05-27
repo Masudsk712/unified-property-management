@@ -1,6 +1,6 @@
 import "dotenv/config";
 
-// Prisma 5 configuration — reads DATABASE_URL from environment
+// Prisma 7 configuration — connection URL provided via datasource.url
 export default {
   schema: "prisma/schema.prisma",
   datasource: {

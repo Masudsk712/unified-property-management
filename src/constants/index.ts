@@ -10,6 +10,7 @@ import {
   Users,
   Activity,
   Home,
+  DollarSign,
 } from "lucide-react";
 
 export const APP_NAME = "PropertyPro";
@@ -54,6 +55,16 @@ export const NAV_ITEMS = [
     ],
   },
   {
+    title: "Tenants",
+    href: "/tenants",
+    icon: "Users",
+  },
+  {
+    title: "Payments",
+    href: "/payments",
+    icon: "DollarSign",
+  },
+  {
     title: "Notifications",
     href: "/notifications",
     icon: "Bell",
@@ -77,6 +88,7 @@ export const ICON_MAP: Record<string, React.ComponentType<{ className?: string }
   Users,
   Activity,
   Home,
+  DollarSign,
 };
 
 export const PROPERTY_TYPES = [

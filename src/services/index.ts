@@ -26,6 +26,9 @@ import type {
   CreateActivityLogInput,
 } from "@/validations";
 
+// ── Pagination type ────────────────────────────────────────────────────────
+export type Pagination = { page?: number; limit?: number };
+
 // ── Generic error wrapper ─────────────────────────────────────────────────
 async function wrap<T>(fn: () => Promise<T>): Promise<ApiResponse<T>> {
   try {
@@ -40,8 +43,8 @@ async function wrap<T>(fn: () => Promise<T>): Promise<ApiResponse<T>> {
 
 // ── Properties ────────────────────────────────────────────────────────────
 export const propertyService = {
-  async getAll(): Promise<ApiResponse<unknown>> {
-    return wrap(() => propertyRepo.findAll());
+  async getAll(pagination?: Pagination): Promise<ApiResponse<unknown>> {
+    return wrap(() => propertyRepo.findAll(pagination));
   },
   async getById(id: string): Promise<ApiResponse<unknown>> {
     return wrap(async () => {
@@ -49,6 +52,9 @@ export const propertyService = {
       if (!prop) throw new Error("Property not found");
       return prop;
     });
+  },
+  async getAnalytics(): Promise<ApiResponse<unknown>> {
+    return wrap(() => propertyRepo.getAnalytics());
   },
   async create(input: CreatePropertyInput): Promise<ApiResponse<unknown>> {
     return wrap(() => propertyRepo.create(input));
@@ -63,8 +69,8 @@ export const propertyService = {
 
 // ── Tenants ───────────────────────────────────────────────────────────────
 export const tenantService = {
-  async getAll(): Promise<ApiResponse<unknown>> {
-    return wrap(() => tenantRepo.findAll());
+  async getAll(pagination?: Pagination): Promise<ApiResponse<unknown>> {
+    return wrap(() => tenantRepo.findAll(pagination));
   },
   async getById(id: string): Promise<ApiResponse<unknown>> {
     return wrap(async () => {
@@ -86,8 +92,8 @@ export const tenantService = {
 
 // ── Maintenance ───────────────────────────────────────────────────────────
 export const maintenanceService = {
-  async getAll(): Promise<ApiResponse<unknown>> {
-    return wrap(() => maintenanceRepo.findAll());
+  async getAll(pagination?: Pagination): Promise<ApiResponse<unknown>> {
+    return wrap(() => maintenanceRepo.findAll(pagination));
   },
   async getById(id: string): Promise<ApiResponse<unknown>> {
     return wrap(async () => {
@@ -112,8 +118,8 @@ export const maintenanceService = {
 
 // ── Amenities ─────────────────────────────────────────────────────────────
 export const amenityService = {
-  async getAll(): Promise<ApiResponse<unknown>> {
-    return wrap(() => amenityRepo.findAll());
+  async getAll(pagination?: Pagination): Promise<ApiResponse<unknown>> {
+    return wrap(() => amenityRepo.findAll(pagination));
   },
   async getById(id: string): Promise<ApiResponse<unknown>> {
     return wrap(async () => {
@@ -135,8 +141,8 @@ export const amenityService = {
 
 // ── Bookings ──────────────────────────────────────────────────────────────
 export const bookingService = {
-  async getAll(): Promise<ApiResponse<unknown>> {
-    return wrap(() => bookingRepo.findAll());
+  async getAll(pagination?: Pagination): Promise<ApiResponse<unknown>> {
+    return wrap(() => bookingRepo.findAll(pagination));
   },
   async getById(id: string): Promise<ApiResponse<unknown>> {
     return wrap(async () => {
@@ -158,8 +164,8 @@ export const bookingService = {
 
 // ── Payments ──────────────────────────────────────────────────────────────
 export const paymentService = {
-  async getAll(): Promise<ApiResponse<unknown>> {
-    return wrap(() => paymentRepo.findAll());
+  async getAll(pagination?: Pagination): Promise<ApiResponse<unknown>> {
+    return wrap(() => paymentRepo.findAll(pagination));
   },
   async getById(id: string): Promise<ApiResponse<unknown>> {
     return wrap(async () => {

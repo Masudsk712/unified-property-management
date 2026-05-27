@@ -47,7 +47,7 @@ export default function ActivityPage() {
             transition={{ delay: index * 0.05 }}
             className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/30 transition-all"
           >
-            <img src={act.userAvatar} alt={act.userName} className="h-10 w-10 rounded-full object-cover ring-2 ring-border" />
+            <img src={act.userAvatar ?? undefined} alt={act.userName} className="h-10 w-10 rounded-full object-cover ring-2 ring-border" />
             <div className="flex-1 min-w-0">
               <p className="text-sm">
                 <span className="font-medium">{act.userName}</span>{" "}

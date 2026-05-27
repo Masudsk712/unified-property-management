@@ -1,13 +1,13 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { useUIStore, useNotificationStore } from "@/store";
-import { currentUser, notifications } from "@/data/mock";
+import { useUIStore } from "@/store";
+import { currentUser } from "@/data/mock";
 import { Button } from "@/components/ui/button";
+import { NotificationCenter } from "@/components/shared/notification-center";
 import { useTheme } from "next-themes";
 import {
   Search,
-  Bell,
   Sun,
   Moon,
   Menu,
@@ -20,32 +20,16 @@ import {
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { formatTimeAgo } from "@/lib/utils";
 
 export function Navbar() {
   const { setMobileSidebarOpen, mobileSidebarOpen } = useUIStore();
-  const { unreadCount, markAllAsRead, markAsRead } = useNotificationStore();
   const { theme, setTheme } = useTheme();
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const notifRef = useRef<HTMLDivElement>(null);
   const profileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    useNotificationStore
-      .getState()
-      .setNotifications(notifications);
-  }, []);
-
-  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        notifRef.current &&
-        !notifRef.current.contains(event.target as Node)
-      ) {
-        setShowNotifications(false);
-      }
       if (
         profileRef.current &&
         !profileRef.current.contains(event.target as Node)
@@ -56,16 +40,6 @@ export function Navbar() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
-  const getNotificationColor = (type: string) => {
-    const colors: Record<string, string> = {
-      error: "bg-destructive/10 text-destructive",
-      success: "bg-success/10 text-success",
-      warning: "bg-warning/10 text-warning",
-      info: "bg-info/10 text-info",
-    };
-    return colors[type] || colors.info;
-  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-xl px-4 lg:px-6">
@@ -112,79 +86,8 @@ export function Navbar() {
           <span className="sr-only">Toggle theme</span>
         </Button>
 
-        {/* Notifications */}
-        <div className="relative" ref={notifRef}>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setShowNotifications(!showNotifications)}
-            className="relative rounded-full"
-          >
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground animate-pulse">
-                {unreadCount}
-              </span>
-            )}
-          </Button>
-
-          <AnimatePresence>
-            {showNotifications && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-border bg-popover shadow-xl"
-              >
-                <div className="flex items-center justify-between p-4 border-b border-border">
-                  <h3 className="font-semibold">Notifications</h3>
-                  <button
-                    onClick={() => markAllAsRead()}
-                    className="text-xs text-primary hover:underline"
-                  >
-                    Mark all read
-                  </button>
-                </div>
-                <div className="max-h-[400px] overflow-y-auto">
-                  {notifications.slice(0, 6).map((notif) => (
-                    <button
-                      key={notif.id}
-                      onClick={() => markAsRead(notif.id)}
-                      className={cn(
-                        "flex w-full gap-3 p-4 text-left transition-colors hover:bg-muted/50 border-b border-border/50",
-                        !notif.read && "bg-primary/5"
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          "mt-1 h-2 w-2 flex-shrink-0 rounded-full",
-                          notif.read ? "bg-muted" : "bg-primary"
-                        )}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium">{notif.title}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {notif.message}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatTimeAgo(notif.createdAt)}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <Link
-                  href="/notifications"
-                  className="block p-3 text-center text-sm text-primary hover:bg-muted/50 rounded-b-xl"
-                  onClick={() => setShowNotifications(false)}
-                >
-                  View all notifications
-                </Link>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        {/* Real-time Notification Center */}
+        <NotificationCenter />
 
         {/* Profile dropdown */}
         <div className="relative" ref={profileRef}>
@@ -193,7 +96,7 @@ export function Navbar() {
             className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-muted"
           >
             <img
-              src={currentUser.avatar}
+              src={currentUser.image ?? undefined}
               alt={currentUser.name}
               className="h-8 w-8 rounded-full object-cover ring-2 ring-border"
             />
